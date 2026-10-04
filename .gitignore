@@ -1,0 +1,33 @@
+# Local configuration and credentials
+.env
+.env.*
+config*.json
+!config.example.json
+!config.openid.example.json
+secrets/
+credentials/
+local/
+*.pem
+*.key
+*service-account*.json
+
+# Dependencies, generated files, and runtime state
+node_modules/
+state/
+dist/
+coverage/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.wacz
+*.zip
+
+# Editor and host files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

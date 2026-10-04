@@ -1,0 +1,8 @@
+[Unit]
+Description=Sync Actual Budget to Google Sheets
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec --workdir /data/actual-sheet-sync actual-server node sync.mjs sync
+# Let the exporter enforce its deadline and clean up its lock.
+TimeoutStartSec=6min

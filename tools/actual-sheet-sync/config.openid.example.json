@@ -1,0 +1,10 @@
+{
+  "serverUrl": "http://127.0.0.1:5006",
+  "syncId": "REPLACE_WITH_BUDGET_SYNC_ID",
+  "spreadsheetId": "REPLACE_WITH_SPREADSHEET_ID",
+  "timezone": "UTC",
+  "currency": "USD",
+  "encryptionPasswordFile": "./secrets/actual-encryption-password",
+  "googleKeyFile": "./secrets/google-service-account.json",
+  "sessionTokenFile": "./secrets/actual-session-token"
+}

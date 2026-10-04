@@ -1,0 +1,20 @@
+{
+  "name": "actual-sheet-sync",
+  "version": "1.1.0",
+  "description": "Scheduled Actual Budget to Google Sheets sync inside an existing Actual server container",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "node --test test.mjs",
+    "test:sdk": "node smoke-sdk.mjs",
+    "sync": "node sync.mjs"
+  },
+  "dependencies": {
+    "@actual-app/api": "26.9.0",
+    "google-auth-library": "11.0.2"
+  }
+}

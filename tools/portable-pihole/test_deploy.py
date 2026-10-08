@@ -137,6 +137,7 @@ class BackendTests(unittest.TestCase):
                               "name=7", "source=static", "address=192.0.2.53", "validate=no"])
     self.assertIn("address=192.0.2.54", calls[1])
     self.assertIn("index=2", calls[1])
+    self.assertIn("[guid]$_.InterfaceGuid -eq [guid]'" + GUID + "'", powershell.call_args.args[0])
 
   @patch.object(deploy, "powershell", return_value="7")
   @patch.object(deploy, "command", return_value="")

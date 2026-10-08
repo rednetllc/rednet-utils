@@ -92,7 +92,7 @@ class DNS:
     if self.system == "Windows":
       ident = valid_uuid(saved["id"])
       index = powershell(
-        "$a = @(Get-NetAdapter | Where-Object { $_.InterfaceGuid -eq '" + ident + "' }); "
+        "$a = @(Get-NetAdapter | Where-Object { [guid]$_.InterfaceGuid -eq [guid]'" + ident + "' }); "
         "if ($a.Count -ne 1) { throw 'Original adapter not found' }; $a[0].ifIndex")
       index = str(int(index))
       base = ["netsh", "interface", "ipv4"]

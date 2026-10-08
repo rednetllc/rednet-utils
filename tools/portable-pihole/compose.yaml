@@ -1,0 +1,20 @@
+name: portable-pihole
+
+services:
+  pihole:
+    image: pihole/pihole:2026.09.0
+    ports:
+      - "127.0.0.1:53:53/tcp"
+      - "127.0.0.1:53:53/udp"
+      - "127.0.0.1:8080:80/tcp"
+    environment:
+      TZ: "${PIHOLE_TZ:-UTC}"
+      FTLCONF_webserver_api_password: "${PIHOLE_PASSWORD:?Set PIHOLE_PASSWORD in .env}"
+      FTLCONF_dns_listeningMode: ALL
+      FTLCONF_dns_upstreams: "${PIHOLE_UPSTREAMS:-1.1.1.1;1.0.0.1}"
+    volumes:
+      - pihole-data:/etc/pihole
+    restart: unless-stopped
+
+volumes:
+  pihole-data:

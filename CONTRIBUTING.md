@@ -15,6 +15,15 @@ npm run test:sdk
 
 Use Node 24. The SDK test creates and removes a disposable local budget; it needs no Actual server or Google credentials. Dependency installation requires registry access.
 
+For Portable Pi-hole, use Python 3.10+ and Docker Compose v2.20+:
+
+```sh
+cd tools/portable-pihole
+python3 -m unittest -v test_deploy
+```
+
+On Windows, use `py -3` in place of `python3`. Tests use synthetic DNS settings and mocked OS/Docker operations; Compose configuration checks need only the CLI, not a daemon. Do not change the test host's DNS or start a live resolver as part of automated tests.
+
 Before submitting, check documentation links, dependency lockfiles, and the full diff for private material. Use placeholders for account IDs, spreadsheet IDs, credentials, names, addresses, hostnames, and deployment paths. Do not attach real budget exports, logs, screenshots, local configuration, databases, or secret files to issues or pull requests. Use a minimal synthetic reproduction.
 
 Dependency and runtime upgrades must be tested together. Update supported-version documentation when compatibility changes. Passing synthetic tests does not establish compatibility with every server image or prove a live sync succeeded.

@@ -2,8 +2,6 @@
 
 Run a temporary, local Pi-hole container and automatically point one host network connection at it. The same Python launcher handles Windows, macOS, and Linux: it saves your existing DNS settings, starts Pi-hole, checks DNS resolution, switches the connection, then restores the saved settings **before** stopping the container.
 
-Adapted from [PortablePiHole](https://github.com/rednetllc/PortablePiHole). The original personal paths, fixed adapter name, embedded password, and unconditional DHCP reset have been replaced with portable configuration and recoverable DNS changes.
-
 ## About
 
 Portable Pi-hole started as a simple Windows `.bat` deployer for a friend who

@@ -2,7 +2,7 @@
 import contextlib
 import io
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import socket
 import tempfile
 import unittest
@@ -101,7 +101,7 @@ class ResolvedTests(unittest.TestCase):
   def test_snapshot_reads_typed_properties(self):
     values={'DNSOverTLS':'no','DNSEx':[[socket.AF_INET,[192,0,2,53],0,'']], 'DNS':[[socket.AF_INET,[192,0,2,53]]], 'Domains':[['example.test',False],['internal.test',True]],'DefaultRoute':False}
     cmd=Mock(side_effect=lambda args:json.dumps({'data':values[args[-1]]}))
-    with patch.object(resolved,'identity',return_value=(2,'00:11:22:33:44:55')),patch.object(resolved.Path,'read_text',return_value='boot'),patch.object(resolved.Path,'resolve',return_value=Path('/run/systemd/resolve/stub-resolv.conf')):
+    with patch.object(resolved,'identity',return_value=(2,'00:11:22:33:44:55')),patch.object(resolved.Path,'read_text',return_value='boot'),patch.object(resolved.Path,'resolve',return_value=PurePosixPath('/run/systemd/resolve/stub-resolv.conf')):
       saved=resolved.snapshot(cmd,'eth0')
     self.assertEqual(saved['domains'],['example.test','~internal.test'])
     self.assertEqual(saved['servers'],['192.0.2.53'])

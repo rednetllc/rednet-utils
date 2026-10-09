@@ -169,7 +169,7 @@ class BackendTests(unittest.TestCase):
   @patch.object(deploy, "command")
   def test_linux_restores_dns_and_automatic_flag(self, command):
     saved = {"id": GUID, "interface": "eth0", "servers": ["192.0.2.53"], "ignore_auto": "no"}
-    command.side_effect = [GUID, "", ""]
+    command.side_effect = [GUID, "", "", GUID, "192.0.2.53", "no"]
     deploy.DNS("Linux").apply(saved, restore=True)
     self.assertEqual(command.call_args_list[1].args[0],
       ["sudo", "nmcli", "connection", "modify", GUID, "ipv4.dns", "192.0.2.53", "ipv4.ignore-auto-dns", "no"])

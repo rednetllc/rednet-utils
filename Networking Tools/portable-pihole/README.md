@@ -204,6 +204,27 @@ DNS queries are sent to your configured upstream provider. Pi-hole's persistent 
 
 On POSIX systems, newly created recovery directories/files use private permissions. On Windows, protect the installation with your user account's NTFS permissions. The launcher changes only the selected connection's settings and does not restore unrelated network changes. A forced kill or power loss cannot run cleanup automatically; use `restore`. Restoring automatic DNS allows the network to supply its current servers, which may differ from those assigned earlier.
 
+## Planned feature: encrypted upstream DNS
+
+Encrypted upstream DNS is **not currently available** in this tool. The pinned
+Pi-hole image (`2026.09.0`) uses ordinary, unencrypted DNS for the default
+Cloudflare upstreams (`1.1.1.1` and `1.0.0.1`); choosing those addresses alone
+does not enable encryption.
+
+The planned option will use Pi-hole's native DNS-over-HTTPS or DNS-over-TLS
+support with Cloudflare's free public resolver, without an account, another
+container, or additional host software. [Native encrypted upstream support](https://github.com/pi-hole/FTL/pull/2940)
+has been merged into Pi-hole's development branch but is not included in the
+[currently pinned stable Docker release](https://github.com/pi-hole/docker-pi-hole/releases/tag/2026.09.0).
+Implementation is deferred until an official stable image includes that support.
+
+Before exposing the option, qualify certificate and hostname verification,
+bootstrap resolution without a DNS loop, failure without plaintext fallback,
+and readiness checks that confirm the encrypted upstream works. Validate
+filtering, session cleanup, and DNS recovery on Windows, macOS, and the supported
+Linux backends. Encryption protects the upstream connection; the resolver
+provider can still see the queries it receives.
+
 ## Maintenance and development
 
 End the session and confirm recovery has completed before updating. Back up Pi-hole settings with its Teleporter export and protect that export privately. Review [upstream Docker upgrade guidance](https://docs.pi-hole.net/docker/upgrading/) before changing the pinned image. An image downgrade alone may not undo a data migration.

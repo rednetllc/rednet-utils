@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Document native encrypted upstream DNS as a future feature, unavailable in the current release.
+
 - Move the tool to `Networking Tools/portable-pihole` and update navigation/CI.
 - Add native `start.sh` / `start.ps1` entry points and automatic OS/distro
   prerequisite setup, with explicit installer/reboot and permission boundaries.

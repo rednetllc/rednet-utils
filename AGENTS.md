@@ -2,7 +2,7 @@
 
 This public monorepo contains reusable home lab utilities. Read the root README and the relevant tool documentation before making changes.
 
-- Keep each utility under `tools/<utility>/` with its own source, examples, documentation, and tests.
+- Keep each utility under `tools/<utility>/` or `Networking Tools/<utility>/` with its own source, examples, documentation, and tests.
 - Keep documentation portable and state supported versions and limits accurately.
 - Publish only synthetic examples and placeholders. Exclude personal information, live configuration, credentials, private infrastructure details, and runtime data.
 - Do not import private repository history or reference private documents.

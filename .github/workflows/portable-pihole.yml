@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: tools/portable-pihole
+        working-directory: Networking Tools/portable-pihole
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,13 +27,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m unittest -v test_deploy.SessionTests test_deploy.BackendTests test_deploy.PreflightTests
+      - run: python -m unittest -v test_deploy.SessionTests test_deploy.BackendTests test_deploy.PreflightTests test_host
+      - name: Check POSIX entry point
+        if: runner.os != 'Windows'
+        run: sh -n start.sh
+      - name: Check PowerShell entry point
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'start.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
   compose:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: tools/portable-pihole
+        working-directory: Networking Tools/portable-pihole
     steps:
       - uses: actions/checkout@v4
         with:

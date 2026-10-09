@@ -16,6 +16,9 @@ import subprocess
 import sys
 import uuid
 
+import host
+import resolved
+
 ROOT = Path(__file__).resolve().parent
 STATE = ROOT / "local" / "session.json"
 
@@ -45,10 +48,11 @@ def valid_uuid(value):
 
 
 class DNS:
-  def __init__(self, system):
+  def __init__(self, system, backend="networkmanager"):
     if system not in ("Windows", "Darwin", "Linux"):
       raise RuntimeError(f"Unsupported platform: {system}")
     self.system = system
+    self.backend = backend
 
   def authorize(self):
     if self.system == "Windows":
@@ -56,7 +60,7 @@ class DNS:
         raise RuntimeError("Run this terminal as Administrator.")
     else:
       # Elevate only networking commands; keep the caller's Docker context.
-      command(["sudo", "-v"])
+      host.interactive_command(["sudo", "-v"])
 
   def snapshot(self, interface):
     if not interface or interface.startswith("-") or any(c in interface for c in "\r\n\0"):
@@ -80,6 +84,8 @@ class DNS:
       for server in servers:
         ipaddress.ip_address(server)
       return {"id": interface, "servers": servers}
+    if self.backend == "networkd":
+      return resolved.snapshot(command, interface)
     ident = valid_uuid(command(["nmcli", "-g", "GENERAL.CON-UUID", "device", "show", interface]))
     servers = ipv4_list(command(["nmcli", "-g", "ipv4.dns", "connection", "show", ident]))
     automatic = command(["nmcli", "-g", "ipv4.ignore-auto-dns", "connection", "show", ident])
@@ -88,6 +94,9 @@ class DNS:
     return {"id": ident, "interface": interface, "servers": servers, "ignore_auto": automatic}
 
   def apply(self, saved, restore=False):
+    if self.system == "Linux" and saved.get("backend") == "networkd":
+      resolved.apply(command, saved, restore)
+      return
     servers = saved["servers"] if restore else ["127.0.0.1"]
     if self.system == "Windows":
       ident = valid_uuid(saved["id"])
@@ -129,6 +138,9 @@ class DNS:
       command(["sudo", "nmcli", "connection", "modify", ident, "ipv4.dns",
                ",".join(ipv4_list(servers)), "ipv4.ignore-auto-dns", automatic])
       command(["sudo", "nmcli", "device", "reapply", interface])
+      actual = self.snapshot(interface)
+      if actual["servers"] != ipv4_list(servers) or actual["ignore_auto"] != automatic:
+        raise RuntimeError("NetworkManager DNS settings did not match requested values.")
 
 
 def compose(*args):
@@ -238,14 +250,30 @@ def run_session(dns, interface, path=STATE, wait=input):
 
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("action", choices=("run", "restore"))
-  parser.add_argument("--interface", help="Windows adapter, macOS network service, or Linux NM device")
+  parser.add_argument("action", nargs="?", default="run", choices=("run", "restore", "setup", "interfaces"))
+  parser.add_argument("--interface", help="Windows adapter, macOS network service, or Linux device (otherwise show picker)")
+  parser.add_argument("--skip-setup", action="store_true", help="use manually installed prerequisites without package installation")
   args = parser.parse_args()
-  if args.action == "run" and not args.interface:
-    parser.error("run requires --interface")
   dns = DNS(platform.system())
   try:
     with session_lock(STATE.parent):
+      if args.action in ("run", "setup"):
+        if STATE.exists():
+          raise RuntimeError("A recovery file exists. Run 'restore' before setup or a new session.")
+        if not args.skip_setup:
+          host.prerequisites(dns.system, command)
+      if args.action == "setup":
+        print("Prerequisites ready. Run deploy.py to select an interface and start a session.")
+        return 0
+      if args.action in ("run", "interfaces"):
+        rows = host.interfaces(dns.system, command, powershell)
+        if args.action == "interfaces":
+          for row in rows:
+            print(row["name"] + " (" + row["backend"] + ")")
+          return 0
+        selected = host.select_interface(rows, args.interface)
+        args.interface = selected["name"]
+        dns.backend = selected["backend"]
       dns.authorize()
       if args.action == "restore":
         recover(dns)

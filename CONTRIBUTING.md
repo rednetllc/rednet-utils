@@ -1,6 +1,6 @@
 # Contributing
 
-Keep each utility self-contained under `tools/<utility>/`. A new utility should include a README with its purpose, prerequisites, installation, configuration, execution, scheduling where applicable, failure recovery, and known limits. Add it to the root utility index.
+Keep each utility self-contained under `tools/<utility>/` or `Networking Tools/<utility>/`. A new utility should include a README with its purpose, prerequisites, installation, configuration, execution, scheduling where applicable, failure recovery, and known limits. Add it to the root utility index.
 
 Use a focused branch and pull request. Explain the problem, resulting behavior, and validation. Test changed behavior with synthetic fixtures; do not require live accounts, production services, or personal data in automated tests. Preserve unrelated tools and their interfaces.
 
@@ -18,7 +18,7 @@ Use Node 24. The SDK test creates and removes a disposable local budget; it need
 For Portable Pi-hole, use Python 3.10+ and Docker Compose v2.20+:
 
 ```sh
-cd tools/portable-pihole
+cd "Networking Tools/portable-pihole"
 python3 -m unittest -v test_deploy
 ```
 

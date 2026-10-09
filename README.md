@@ -7,14 +7,15 @@ Small, practical utilities created for home lab projects and shared for general 
 | Utility | Purpose | Runtime |
 | --- | --- | --- |
 | [Actual Sheet Sync](tools/actual-sheet-sync/README.md) | Keep an Actual Budget ledger and daily account balances in Google Sheets. | Node 24 inside an existing Actual server Docker container; scheduled by the host. |
-| [Portable Pi-hole](tools/portable-pihole/README.md) | Start local Pi-hole with automatic host DNS switching and recovery. | Python 3.10+, Docker Compose v2; Windows, macOS, or NetworkManager-based Linux. |
+| [Portable Pi-hole](Networking%20Tools/portable-pihole/README.md) | Start local Pi-hole with automatic host DNS switching and recovery. | Python 3.10+, Docker Compose v2; Windows, macOS, or Ubuntu, Fedora, or Arch Linux (NetworkManager or networkd/resolved). |
 
 Start with the utility's README. Each tool documents its supported versions, operating constraints, data handling, and validation. Production use depends on meeting those requirements and checking the first run in your own environment.
 
 ## Repository layout
 
 ```text
-tools/<utility>/   Source, tests, documentation, and synthetic examples
+tools/<utility>/   General utilities
+Networking Tools/<utility>/ Networking utilities, tests, and documentation
 .github/workflows/ Automated checks
 ```
 

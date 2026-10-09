@@ -4,6 +4,25 @@ Run a temporary, local Pi-hole container and automatically point one host networ
 
 Adapted from [PortablePiHole](https://github.com/rednetllc/PortablePiHole). The original personal paths, fixed adapter name, embedded password, and unconditional DHCP reset have been replaced with portable configuration and recoverable DNS changes.
 
+## About
+
+Portable Pi-hole started as a simple Windows `.bat` deployer for a friend who
+wanted DNS ad blocking on the go but did not have a VPN back to his home network.
+Running Pi-hole locally in a container let him take his own filtering setup with
+him, with settings preserved between sessions, without depending on access to a
+home server.
+
+A VPN back home can already provide access to a home DNS blocker. This project
+offers another useful option: a Pi-hole instance on the computer you are using,
+ready for temporary sessions away from home on networks that allow the required
+DNS connectivity. Its configuration stays on that computer as you travel.
+
+What began as a small tool for one friend is being expanded to Windows, macOS,
+and Linux so more people can use it. The goal is to keep a useful mini project
+accessible: start local filtering when you need it, retain your Pi-hole settings,
+and restore the network connection when you finish. It provides DNS filtering;
+it does not replace a VPN or block every kind of advertisement.
+
 ## Requirements
 
 - **Python 3.10 or newer**, using only the standard library. No pip installation is needed.

@@ -1,6 +1,6 @@
 {
   "name": "actual-sheet-sync",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Scheduled Actual Budget to Google Sheets sync inside an existing Actual server container",
   "license": "MIT",
   "private": true,
@@ -16,5 +16,8 @@
   "dependencies": {
     "@actual-app/api": "26.9.0",
     "google-auth-library": "11.0.2"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   }
 }

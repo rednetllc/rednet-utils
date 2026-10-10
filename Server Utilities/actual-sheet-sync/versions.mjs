@@ -51,6 +51,8 @@ export async function updateSdk(state, version, signal, install = exec) {
       JSON.stringify({
         private: true,
         dependencies: { "@actual-app/api": version },
+        // The SQLite version follows the selected SDK. Approve only this native dependency.
+        allowScripts: { "better-sqlite3": true },
       }),
     );
     await install(
@@ -72,13 +74,18 @@ export async function updateSdk(state, version, signal, install = exec) {
     );
     const sdk = await installed(stage);
     check(sdk.version === version, "SDK_VERSION");
-    // Check the package can be imported in a fresh process before activation.
+    // Importing the SDK alone does not load its native SQLite binding.
+    // Open a disposable in-memory database before activating the new SDK.
     await exec(
       process.execPath,
       [
         "--input-type=module",
         "-e",
-        "await import(process.argv[1])",
+        `import { createRequire } from "node:module";
+        await import(process.argv[1]);
+        const Database = createRequire(process.argv[1])("better-sqlite3");
+        const db = new Database(":memory:");
+        db.close();`,
         pathToFileURL(sdk.entry).href,
       ],
       { signal, timeout: 15000 },

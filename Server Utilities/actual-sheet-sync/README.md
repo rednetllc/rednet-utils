@@ -41,6 +41,8 @@ docker cp versions.mjs actual-server:/data/actual-sheet-sync/
 docker exec --workdir /data/actual-sheet-sync actual-server npm ci --omit=dev
 ```
 
+The package declares approval for the required `better-sqlite3` native installation script, so no manual `npm install-scripts approve` or `npm rebuild` step is needed during normal installation. Automatic SDK updates carry the same package-specific approval and verify an in-memory SQLite database before activating the SDK. The bundled dependency approval is version-pinned; automatic updates allow the SQLite version required by the selected SDK. No blanket script approval is enabled. An explicit operator setting such as `ignore-scripts` is still respected.
+
 Use the same container user for installation and scheduled execution. If your image runs as a non-root user, provision the directory and copied files with ownership that lets that user read the code and manage `node_modules` and `state`. Do not make credentials world-readable to work around ownership errors.
 
 ## 2. Configure locally
@@ -108,7 +110,7 @@ Stop the host's scheduled task and wait for active runs to finish before updatin
 
 Version 1.2.0 moves the repository source from `tools/actual-sheet-sync` to `Server Utilities/actual-sheet-sync`. Existing container installation paths and scheduler commands stay valid. Copy all eight runtime files when upgrading; the new `versions.mjs` is required. Stop **all** runs before upgrading because locking now covers the entire installation, including automatic SDK updates.
 
-Automatic updates target `@actual-app/api`, not the exporter source or running Actual server. A newer stable server version is installed at its exact version from npm in a temporary directory, checked for package/import compatibility, then activated for a fresh worker and future runs. Equal or older server versions do not trigger installation or downgrade. Prerelease/unrecognized versions skip updates and appear as warnings. An unavailable release or failed install leaves the current SDK selected and attempts the export with a warning; actual API or validation errors still fail the run. Updates require writable state, registry access, and compatible native build support. They share the run's five-minute deadline.
+Automatic updates target `@actual-app/api`, not the exporter source or running Actual server. A newer stable server version is installed at its exact version from npm in a temporary directory, checked for package/import compatibility and a working native SQLite binding, then activated for a fresh worker and future runs. Equal or older server versions do not trigger installation or downgrade. Prerelease/unrecognized versions skip updates and appear as warnings. An unavailable release or failed install leaves the current SDK selected and attempts the export with a warning; actual API or validation errors still fail the run. Updates require writable state, registry access, and compatible native build support. They share the run's five-minute deadline.
 
 For an existing installation with an explicit timezone, the update preserves its snapshot day. If `timezone` was omitted, add your desired timezone explicitly before updating: the default is now UTC. Existing sheet metadata and row IDs are unchanged.
 

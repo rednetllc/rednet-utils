@@ -546,6 +546,7 @@ test("successful SDK update activates exact version for future fresh workers", a
           await readFile(join(options.cwd, "package.json"), "utf8"),
         );
         assert.equal(pkg.dependencies["@actual-app/api"], "26.10.0");
+        assert.deepEqual(pkg.allowScripts, { "better-sqlite3": true });
         const base = join(options.cwd, "node_modules/@actual-app/api");
         await mkdir(join(base, "lib"), { recursive: true });
         await writeFile(
@@ -553,6 +554,12 @@ test("successful SDK update activates exact version for future fresh workers", a
           JSON.stringify({ version: "26.10.0", main: "lib/index.js" }),
         );
         await writeFile(join(base, "lib/index.js"), "module.exports = {};");
+        const sqlite = join(options.cwd, "node_modules/better-sqlite3");
+        await mkdir(sqlite, { recursive: true });
+        await writeFile(
+          join(sqlite, "index.js"),
+          'module.exports = class { constructor(path) { if (path !== ":memory:") throw new Error("Unexpected database"); } close() {} };',
+        );
       },
     );
     assert.equal(sdk.version, "26.10.0");
@@ -629,5 +636,34 @@ test("worker probes selected SDK in a fresh process and returns sanitized errors
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("SDK import success with broken SQLite binding does not activate update", async () => {
+  const state = await mkdtemp(join(tmpdir(), "actual-upgrade-"));
+  try {
+    await writeFile(join(state, "sdk-version"), "26.9.0");
+    await assert.rejects(
+      updateSdk(state, "26.10.0", undefined, async (_cmd, _args, options) => {
+        const base = join(options.cwd, "node_modules/@actual-app/api");
+        await mkdir(join(base, "lib"), { recursive: true });
+        await writeFile(
+          join(base, "package.json"),
+          JSON.stringify({ version: "26.10.0", main: "lib/index.js" }),
+        );
+        await writeFile(join(base, "lib/index.js"), "module.exports = {};");
+        const sqlite = join(options.cwd, "node_modules/better-sqlite3");
+        await mkdir(sqlite, { recursive: true });
+        await writeFile(
+          join(sqlite, "index.js"),
+          'module.exports = class { constructor() { throw new Error("Missing native binding"); } };',
+        );
+      }),
+      /Missing native binding/,
+    );
+    assert.equal(await readFile(join(state, "sdk-version"), "utf8"), "26.9.0");
+    assert.deepEqual(await readdir(state), ["sdk-version"]);
+  } finally {
+    await rm(state, { recursive: true, force: true });
   }
 });

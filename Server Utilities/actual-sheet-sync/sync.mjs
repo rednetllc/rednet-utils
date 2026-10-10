@@ -2,7 +2,6 @@
 import { readFile, mkdir, mkdtemp, chmod, rm, lstat } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { fork } from "node:child_process";
 import {
@@ -13,7 +12,7 @@ import {
   parseRows,
 } from "./protocol.mjs";
 import { Sheets, readPrivate } from "./sheets.mjs";
-import { SDK_VERSION } from "./source.mjs";
+import { currentSdk, updateSdk, newer, release } from "./versions.mjs";
 const root = dirname(fileURLToPath(import.meta.url));
 export async function configFrom(path) {
   const base = dirname(resolve(path));
@@ -92,7 +91,14 @@ async function localSecrets(c) {
   );
   return credentials;
 }
-async function runWorker(c, credentials, cache, signal) {
+export async function runWorker(
+  c,
+  credentials,
+  cache,
+  signal,
+  sdk,
+  probe = false,
+) {
   return new Promise((resolveResult, reject) => {
     const child = fork(join(root, "worker.mjs"), [], {
       cwd: root,
@@ -148,7 +154,14 @@ async function runWorker(c, credentials, cache, signal) {
       else resolveResult(result);
     });
     if (signal.aborted) abort();
-    else child.send({ config: c, credentials, cache });
+    else
+      child.send({
+        config: { ...c, sdkVersion: sdk.version },
+        credentials,
+        cache,
+        sdkEntry: sdk.entry,
+        probe,
+      });
   });
 }
 async function main() {
@@ -176,10 +189,7 @@ async function main() {
   await mkdir(state, { recursive: true, mode: 0o700 });
   check(!(await lstat(state)).isSymbolicLink(), "STATE_PATH");
   await chmod(state, 0o700);
-  const lock = join(
-    state,
-    createHash("sha256").update(c.spreadsheetId).digest("hex") + ".lock",
-  );
+  const lock = join(state, "installation.lock");
   try {
     await mkdir(lock, { mode: 0o700 });
   } catch (e) {
@@ -191,7 +201,21 @@ async function main() {
     throw e;
   }
   const controller = new AbortController();
-  let cache;
+  let cache, sheets;
+  const binding = createHash("sha256")
+    .update(typeof c.syncId === "string" ? c.syncId : "")
+    .digest("hex");
+  const status = {
+    last_attempt_at: new Date().toISOString(),
+    run_status: "running",
+    error_code: "",
+    error_message: "",
+    sdk_version: "unknown",
+    server_version: "unknown",
+    version_mismatch: "unknown",
+    version_mismatch_detected: "unknown",
+    sdk_update: "not_needed",
+  };
   const abort = () => controller.abort();
   const deadline = setTimeout(() => {
     controller.abort();
@@ -209,20 +233,15 @@ async function main() {
   process.once("SIGINT", abort);
   process.once("SIGTERM", abort);
   try {
-    const sheets = await Sheets.connect(c);
+    sheets = await Sheets.connect(c);
     if (command === "setup") {
       console.log(
         JSON.stringify({ status: "setup_verified", ...(await sheets.setup()) }),
       );
       return;
     }
-    const require = createRequire(import.meta.url);
-    const sdkRoot = resolve(dirname(require.resolve("@actual-app/api")), "..");
-    check(
-      JSON.parse(await readFile(join(sdkRoot, "package.json"), "utf8"))
-        .version === SDK_VERSION,
-      "SDK_VERSION",
-    );
+    let sdk = await currentSdk(root, state);
+    status.sdk_version = sdk.version;
     const credentials = await localSecrets(c);
     // Check Google access/header ownership before connecting to Actual.
     const meta = await sheets.metadata();
@@ -231,7 +250,58 @@ async function main() {
     for (const [name, rows] of Object.entries(existing)) parseRows(name, rows);
     cache = await mkdtemp(join(state, "cache-"));
     await chmod(cache, 0o700);
-    const tables = await runWorker(c, credentials, cache, controller.signal);
+    const version = await runWorker(
+      c,
+      credentials,
+      cache,
+      controller.signal,
+      sdk,
+      true,
+    );
+    status.server_version = release(version.version)
+      ? version.version
+      : "unrecognized";
+    status.version_mismatch_detected = String(version.version !== sdk.version);
+    if (newer(version.version, sdk.version)) {
+      try {
+        sdk = await updateSdk(state, version.version, controller.signal);
+        status.sdk_update = "updated";
+        status.sdk_version = sdk.version;
+      } catch {
+        status.sdk_update = "failed_using_existing_sdk";
+        // A registry/build failure does not prove the existing SDK incompatible.
+      }
+    } else if (!release(version.version))
+      status.sdk_update = "skipped_unrecognized_version";
+    status.version_mismatch = String(version.version !== sdk.version);
+    check(!controller.signal.aborted, "INTERRUPTED");
+    const tables = await runWorker(
+      c,
+      credentials,
+      cache,
+      controller.signal,
+      sdk,
+    );
+    // Acquisition checks the server again; expose changes during this run too.
+    const acquiredVersion = tables.Actual_Status.find(
+      (r) => r.key === "server_version",
+    )?.value;
+    status.server_version = release(acquiredVersion)
+      ? acquiredVersion
+      : "unrecognized";
+    status.version_mismatch = String(acquiredVersion !== sdk.version);
+    status.run_status =
+      status.version_mismatch === "true" ||
+      status.sdk_update.includes("failed") ||
+      status.sdk_update.startsWith("skipped")
+        ? "warning"
+        : "success";
+    tables.Actual_Status = tables.Actual_Status.filter(
+      (r) => !(r.key in status),
+    );
+    tables.Actual_Status.push(
+      ...Object.entries(status).map(([key, value]) => ({ key, value })),
+    );
     check(!controller.signal.aborted, "INTERRUPTED");
     const secrets = [c.syncId, ...Object.values(credentials).filter(Boolean)];
     secretScan(tables, secrets);
@@ -239,19 +309,45 @@ async function main() {
       console.log(
         JSON.stringify({
           status: "checks_passed_no_sheet_write",
+          diagnostics: status,
           transactions: tables.Actual_Transactions.length,
           accounts: tables.Actual_Accounts.length,
         }),
       );
       return;
     }
-    const binding = createHash("sha256").update(c.syncId).digest("hex");
     console.log(
       JSON.stringify({
         status: "sheet_sync_verified",
         ...(await sheets.publish(tables, binding, secrets)),
       }),
     );
+  } catch (e) {
+    if (command === "sync" && sheets) {
+      try {
+        await sheets.reportStatus(
+          {
+            ...status,
+            run_status: "error",
+            error_code: e instanceof SyncError ? e.code : "RUN_FAILED",
+            error_message:
+              e instanceof SyncError
+                ? e.message
+                : "Export failed; last successful capture and financial rows may be stale. Check scheduler logs and the troubleshooting guide.",
+          },
+          binding,
+        );
+      } catch {
+        console.error(
+          JSON.stringify({
+            error: "STATUS_REPORT_FAILED",
+            message:
+              "Could not update Actual_Status; inspect the original run error and Google access.",
+          }),
+        );
+      }
+    }
+    throw e;
   } finally {
     clearTimeout(deadline);
     clearTimeout(force);

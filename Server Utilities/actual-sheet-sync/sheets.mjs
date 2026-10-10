@@ -108,6 +108,22 @@ export class Sheets {
     for (const n of Object.keys(HEADERS)) parseRows(n, rows[n]);
     return { tabs: Object.keys(HEADERS).length };
   }
+  async reportStatus(fields, budgetBinding) {
+    const meta = await this.metadata();
+    const before = await this.read(meta);
+    const status = parseRows("Actual_Status", before.Actual_Status);
+    const binding = status.find((r) => r.key === "budget_binding")?.value;
+    check(!binding || binding === budgetBinding, "BUDGET_CHANGED");
+    const values = new Map(status.map((r) => [r.key, r.value]));
+    for (const [key, value] of Object.entries(fields)) values.set(key, value);
+    const tables = {
+      Actual_Status: [...values].map(([key, value]) => ({ key, value })),
+    };
+    secretScan(tables, this.secrets);
+    await this.request(":batchUpdate", {
+      requests: publishRequests(meta, before, tables, ["Actual_Status"]),
+    });
+  }
   async publish(tables, budgetBinding, secrets) {
     const meta = await this.metadata();
     const before = await this.read(meta);

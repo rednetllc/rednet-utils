@@ -4,18 +4,18 @@ Sync Actual Budget to Google Sheets from **inside your existing Actual server Do
 
 ## Requirements
 
-- A running Linux Actual server container with **Node 24**, npm, and **Actual server 26.9.0**. The SDK is pinned to the matching version. Custom images need the same runtime and native-module support.
+- A running Linux Actual server container with **Node 24**, npm, and an Actual server. The bundled SDK baseline is **26.9.0**; newer stable server releases trigger an automatic matching SDK installation. Version differences alone do not stop exports. Custom images need the same runtime and native-module support.
 - A persistent, writable directory in that container, separate from Actual's budget files. The examples use `/data/actual-sheet-sync`; replace it with a directory on your container's persistent volume.
 - An **encrypted tracking-mode budget with no auto-post schedules** and a currency with two fractional digits. Other budget modes and unencrypted budgets are not supported.
 - A Google service account with Sheets API enabled and Editor access to a spreadsheet dedicated to this budget. Keep spreadsheet sharing Restricted.
 - A host that can invoke the Docker CLI: Linux, macOS, Windows with Docker Desktop running Linux containers, or another Docker-capable host with a scheduler. The task's account must have Docker access, and the container must be running when the task starts.
-- Outbound access from the container to Google's authentication and Sheets APIs, and to npm's registry during installation.
+- Outbound access from the container to Google's authentication and Sheets APIs, and to npm's registry during installation and automatic SDK updates.
 
 The exporter connects to Actual through loopback inside the container. Use the **container's internal server port**, not a host-published port. It does not require a separate exporter container or host networking.
 
 ## 1. Install in the existing container
 
-Download this repository and open a terminal in `tools/actual-sheet-sync`. In all examples, replace `actual-server` with your existing container's name and `/data/actual-sheet-sync` with your chosen persistent directory. These Docker commands work in POSIX shells and PowerShell.
+Download this repository and open a terminal in `Server Utilities/actual-sheet-sync`. In all examples, replace `actual-server` with your existing container's name and `/data/actual-sheet-sync` with your chosen persistent directory. These Docker commands work in POSIX shells and PowerShell.
 
 Check the container runtime first:
 
@@ -26,7 +26,7 @@ docker exec actual-server npm --version
 
 Node must report `v24.x`. Select a compatible server image if needed; do not upgrade the running server as part of installing this utility.
 
-Create the directory and copy only the seven runtime files:
+Create the directory and copy only the eight runtime files:
 
 ```sh
 docker exec actual-server mkdir -p /data/actual-sheet-sync
@@ -37,6 +37,7 @@ docker cp worker.mjs actual-server:/data/actual-sheet-sync/
 docker cp source.mjs actual-server:/data/actual-sheet-sync/
 docker cp sheets.mjs actual-server:/data/actual-sheet-sync/
 docker cp protocol.mjs actual-server:/data/actual-sheet-sync/
+docker cp versions.mjs actual-server:/data/actual-sheet-sync/
 docker exec --workdir /data/actual-sheet-sync actual-server npm ci --omit=dev
 ```
 
@@ -78,10 +79,10 @@ docker exec --workdir /data/actual-sheet-sync actual-server node sync.mjs sync
 ```
 
 - `setup` creates or verifies eight managed `Actual_*` tabs; it does not connect to Actual.
-- `check` acquires and validates Actual data and checks Google access without writing spreadsheet rows.
+- `check` checks versions, may update the local SDK, acquires and validates Actual data, and checks Google access without writing spreadsheet rows. Diagnostics are printed to the console.
 - `sync` reconciles the managed tabs in one atomic batch and verifies readback.
 
-Compare the first export with Actual, rerun `sync`, and confirm that transactions and same-day balances are not duplicated. `Actual_Status` records the last successful capture. Keep formulas and manual analysis in separate tabs. Use only one installation and one budget per spreadsheet.
+Compare the first export with Actual, rerun `sync`, and confirm that transactions and same-day balances are not duplicated. `Actual_Status` records the last successful capture and the latest sync outcome, version mismatch, SDK update result, and sanitized error code. Keep formulas and manual analysis in separate tabs. Use only one installation and one budget per spreadsheet.
 
 ## 4. Schedule from the host
 
@@ -103,9 +104,13 @@ Limits include 50,000 live transactions, fewer than 100,000 rows per tab, an 8 M
 
 ## Maintenance and development
 
-Stop the host's scheduled task and wait for active runs to finish before updating. Back up local configuration and credentials privately. Replace the seven runtime files together and run `npm ci --omit=dev` inside the container. Repeat `check` and `sync` before re-enabling the schedule. Reinstall dependencies after changing the container's Node major version or CPU architecture; review compatibility before updating Actual itself.
+Stop the host's scheduled task and wait for active runs to finish before updating. Back up local configuration and credentials privately. Replace the eight runtime files together and run `npm ci --omit=dev` inside the container. Repeat `check` and `sync` before re-enabling the schedule. Reinstall dependencies after changing the container's Node major version or CPU architecture; review compatibility before updating Actual itself. Automatically selected SDKs live under `state/sdk-*`; after a Node-major or architecture change, remove those SDK directories and `state/sdk-version` while the scheduler is stopped, then reinstall the bundled dependencies. Keep all other state and credential files.
 
-For an existing installation with an explicit timezone, version 1.1.0 preserves its snapshot day. If `timezone` was omitted, add your desired timezone explicitly before updating: the default is now UTC. Existing sheet metadata and row IDs are unchanged.
+Version 1.2.0 moves the repository source from `tools/actual-sheet-sync` to `Server Utilities/actual-sheet-sync`. Existing container installation paths and scheduler commands stay valid. Copy all eight runtime files when upgrading; the new `versions.mjs` is required. Stop **all** runs before upgrading because locking now covers the entire installation, including automatic SDK updates.
+
+Automatic updates target `@actual-app/api`, not the exporter source or running Actual server. A newer stable server version is installed at its exact version from npm in a temporary directory, checked for package/import compatibility, then activated for a fresh worker and future runs. Equal or older server versions do not trigger installation or downgrade. Prerelease/unrecognized versions skip updates and appear as warnings. An unavailable release or failed install leaves the current SDK selected and attempts the export with a warning; actual API or validation errors still fail the run. Updates require writable state, registry access, and compatible native build support. They share the run's five-minute deadline.
+
+For an existing installation with an explicit timezone, the update preserves its snapshot day. If `timezone` was omitted, add your desired timezone explicitly before updating: the default is now UTC. Existing sheet metadata and row IDs are unchanged.
 
 To remove the exporter, disable its scheduled task, wait for any run to finish, and remove only its installation directory. It does not require changes to the Actual server's application or budget directories. Exported Google Sheets data remains until you remove it yourself.
 

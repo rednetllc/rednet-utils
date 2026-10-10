@@ -277,9 +277,15 @@ export function setupRequests(meta) {
   }
   return requests;
 }
-export function publishRequests(meta, previous, tables) {
+export function publishRequests(
+  meta,
+  previous,
+  tables,
+  names = Object.keys(HEADERS),
+) {
   const requests = [];
-  for (const [name, columns] of Object.entries(HEADERS)) {
+  for (const name of names) {
+    const columns = HEADERS[name];
     const sheet = meta.sheets.find((s) => s.properties.title === name);
     check(sheet, "TAB_MISSING", "Run setup once before scheduling sync.");
     check(

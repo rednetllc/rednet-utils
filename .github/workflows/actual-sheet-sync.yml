@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: tools/actual-sheet-sync
+        working-directory: Server Utilities/actual-sheet-sync
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: tools/actual-sheet-sync/package-lock.json
+          cache-dependency-path: Server Utilities/actual-sheet-sync/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm run test:sdk

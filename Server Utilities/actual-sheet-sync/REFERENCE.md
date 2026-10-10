@@ -22,6 +22,7 @@ Notes, imported descriptions and bank metadata are omitted. Labels remain financ
 ## Failures
 
 - **Version mismatch:** a difference alone is a warning. Newer stable server versions trigger an exact SDK update; older servers continue with the installed SDK. Actual API errors still stop the run. If `sdk_update=failed_using_existing_sdk`, check registry access, write permissions, Node compatibility, and native build support. Reinstall dependencies and clear only cached SDKs after a Node-major or architecture change.
+- **npm install-script notice:** a successful sync confirms the required SQLite binding works; no rebuild is needed just to clear an advisory. Version 1.2.1 declares the required SQLite script approval for both installation and SDK updates. If installation scripts are explicitly disabled, restore the intended npm policy before reinstalling. Deprecation and funding notices alone are not export failures.
 - **Google access:** enable Sheets API and share the spreadsheet with the service account's email as Editor. A public edit link alone is insufficient.
 - **Changed headers or ownership:** restore the managed tab structure before rerunning. Put manual work in separate tabs.
 - **Auto-post schedule detected:** stop scheduling and review the budget configuration. Detection occurs after acquisition and cannot prevent SDK startup posting.

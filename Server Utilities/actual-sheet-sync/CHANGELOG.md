@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Declare scoped SQLite install-script approvals for normal installation and automatic SDK updates, removing the manual approval step.
+- Verify that a staged SDK can open an in-memory SQLite database before activation; preserve the current SDK when the native binding is unavailable.
+
 ## 1.2.0
 
 - Move the exporter to `Server Utilities/actual-sheet-sync` and update CI and repository navigation.

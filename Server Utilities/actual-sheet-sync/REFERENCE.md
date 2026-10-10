@@ -11,7 +11,7 @@
 | Actual_Monthly | Available months within the previous 12 completed months plus current month. |
 | Actual_Schedules | Basic schedule details; amount ranges remain blank. |
 | Actual_Balances | One snapshot per account/day; same-day reruns replace that snapshot. |
-| Actual_Status | Last successful capture, versions, coverage and validation. |
+| Actual_Status | Last successful capture, latest sync outcome, versions, updates, coverage and validation. |
 
 For transaction totals, filter `deleted=false`. Use `include_in_ledger=true` for account totals or `include_in_category=true` for category activity to avoid double-counting splits. Exclude future rows for current totals, and handle transfers and off-budget accounts according to the analysis.
 
@@ -21,14 +21,18 @@ Notes, imported descriptions and bank metadata are omitted. Labels remain financ
 
 ## Failures
 
-- **Version mismatch:** use the pinned Actual/API 26.9.0 combination. Reinstall dependencies inside the container after a Node-major or architecture change.
+- **Version mismatch:** a difference alone is a warning. Newer stable server versions trigger an exact SDK update; older servers continue with the installed SDK. Actual API errors still stop the run. If `sdk_update=failed_using_existing_sdk`, check registry access, write permissions, Node compatibility, and native build support. Reinstall dependencies and clear only cached SDKs after a Node-major or architecture change.
 - **Google access:** enable Sheets API and share the spreadsheet with the service account's email as Editor. A public edit link alone is insufficient.
 - **Changed headers or ownership:** restore the managed tab structure before rerunning. Put manual work in separate tabs.
 - **Auto-post schedule detected:** stop scheduling and review the budget configuration. Detection occurs after acquisition and cannot prevent SDK startup posting.
 - **Existing lock:** confirm the previous process stopped before removing its `state/*.lock` directory and leftover `state/cache-*` cache. Forced termination can leave these behind.
 - **Readback failure:** the Google write may already have succeeded. Check for concurrent edits, then rerun; stable IDs prevent duplicate appends.
 
-A single atomic batch updates the managed tabs. Limits are 50,000 live transactions, fewer than 100,000 rows per tab, an 8 MiB batch and a five-minute deadline. Oversized runs stop without publishing a partial batch.
+`Actual_Status` includes `last_attempt_at`, `run_status` (`success`, `warning`, or `error`), `error_code`, `error_message`, `sdk_version`, `server_version`, `version_mismatch`, `version_mismatch_detected` (before updating), and `sdk_update`. A successful sync clears prior errors. An initial mismatch remains observable even when the SDK update resolves it. Unrecognized server version strings are not copied to Google.
+
+On a failed `sync`, a separate best-effort status-only batch preserves `last_success_at` and existing financial rows. A readback failure may mean financial rows were already committed; status reports the failure rather than claiming rollback. Status writes retain ownership/header/budget-binding checks. If configuration cannot be loaded, a lock cannot be acquired, Google authentication/access fails, tabs are missing, or the process is forcibly terminated, reporting may be impossible. Monitor scheduler exit codes and status freshness as well as the sheet; `STATUS_REPORT_FAILED` identifies a failed reporting attempt. `check` and `setup` do not publish failure status.
+
+A single atomic batch updates the financial tabs and successful status. Limits are 50,000 live transactions, fewer than 100,000 rows per tab, an 8 MiB batch and a five-minute deadline. Oversized runs stop without publishing a partial batch.
 
 Exit codes: 0 success, 7 existing lock, 4 forced deadline, 1 other failure. Logs omit raw SDK errors and credentials. Disable the host scheduler entry to stop scheduled runs.
 

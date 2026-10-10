@@ -1,13 +1,13 @@
 # Contributing
 
-Keep each utility self-contained under `tools/<utility>/` or `Networking Tools/<utility>/`. A new utility should include a README with its purpose, prerequisites, installation, configuration, execution, scheduling where applicable, failure recovery, and known limits. Add it to the root utility index.
+Keep each utility self-contained under `tools/<utility>/`, `Server Utilities/<utility>/`, or `Networking Tools/<utility>/`. A new utility should include a README with its purpose, prerequisites, installation, configuration, execution, scheduling where applicable, failure recovery, and known limits. Add it to the root utility index.
 
 Use a focused branch and pull request. Explain the problem, resulting behavior, and validation. Test changed behavior with synthetic fixtures; do not require live accounts, production services, or personal data in automated tests. Preserve unrelated tools and their interfaces.
 
 For Actual Sheet Sync:
 
 ```sh
-cd tools/actual-sheet-sync
+cd "Server Utilities/actual-sheet-sync"
 npm ci
 npm test
 npm run test:sdk

@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  writeFile,
+  chmod,
+  rm,
+  mkdir,
+  readFile,
+  readdir,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,7 +23,8 @@ import {
 } from "./protocol.mjs";
 import { normalize, acquire, SDK_VERSION } from "./source.mjs";
 import { Sheets, readPrivate } from "./sheets.mjs";
-import { configFrom } from "./sync.mjs";
+import { newer, release, updateSdk, currentSdk } from "./versions.mjs";
+import { configFrom, runWorker } from "./sync.mjs";
 const config = { currency: "USD", timezone: "America/New_York" };
 function fixture() {
   return {
@@ -278,9 +287,15 @@ test("config allows loopback only and resolves secret paths locally", async () =
     await writeFile(path, JSON.stringify(data));
     assert.equal((await configFrom(path)).googleKeyFile, join(dir, "key.json"));
     assert.equal((await configFrom(path)).timezone, "UTC");
-    await writeFile(path, JSON.stringify({ ...data, timezone: "Pacific/Auckland" }));
+    await writeFile(
+      path,
+      JSON.stringify({ ...data, timezone: "Pacific/Auckland" }),
+    );
     assert.equal((await configFrom(path)).timezone, "Pacific/Auckland");
-    await writeFile(path, JSON.stringify({ ...data, timezone: "Invalid/Timezone" }));
+    await writeFile(
+      path,
+      JSON.stringify({ ...data, timezone: "Invalid/Timezone" }),
+    );
     await assert.rejects(configFrom(path));
     await writeFile(
       path,
@@ -299,7 +314,11 @@ test("config accepts container loopback forms but rejects credential-bearing and
       spreadsheetId: "synthetic-sheet-identifier",
       googleKeyFile: "key.json",
     };
-    for (const serverUrl of ["http://localhost:5006", "http://[::1]:5006", "http://127.0.0.1:8080"]) {
+    for (const serverUrl of [
+      "http://localhost:5006",
+      "http://[::1]:5006",
+      "http://127.0.0.1:8080",
+    ]) {
       await writeFile(path, JSON.stringify({ ...data, serverUrl }));
       assert.equal((await configFrom(path)).serverUrl, serverUrl);
     }
@@ -319,14 +338,16 @@ test("config accepts container loopback forms but rejects credential-bearing and
     await rm(dir, { recursive: true, force: true });
   }
 });
-test("version mismatch prevents any download", async () => {
+test("version mismatch permits download and propagates actual download errors", async () => {
   let downloaded = false,
     closed = false;
   const fake = {
     init: async () => {},
-    getServerVersion: async () => ({ version: "different" }),
+    getServerVersion: async () => ({ version: "26.8.0" }),
+    getBudgets: async () => [{ groupId: "id", encryptKeyId: "encrypted" }],
     downloadBudget: async () => {
       downloaded = true;
+      throw new Error("synthetic download failure");
     },
     shutdown: async () => {
       closed = true;
@@ -339,8 +360,9 @@ test("version mismatch prevents any download", async () => {
       { password: "fake", encryptionPassword: "fake2" },
       "/unused",
     ),
+    /synthetic download failure/,
   );
-  assert.equal(downloaded, false);
+  assert.equal(downloaded, true);
   assert.equal(closed, true);
 });
 test("plain budget rejected before download despite supplied encryption password", async () => {
@@ -364,7 +386,7 @@ test("plain budget rejected before download despite supplied encryption password
   );
   assert.equal(downloaded, false);
 });
-test("reads occur only after offline reopen, and no explicit write/sync API is used", async () => {
+test("mismatched server exports successfully using offline reads and no explicit write API", async () => {
   let offline = false,
     downloaded = false;
   const fixtureData = fixture();
@@ -378,7 +400,7 @@ test("reads occur only after offline reopen, and no explicit write/sync API is u
       shutdown: async () => {
         calls.push("shutdown");
       },
-      getServerVersion: async () => ({ version: SDK_VERSION }),
+      getServerVersion: async () => ({ version: "26.8.0" }),
       getBudgets: async () =>
         downloaded
           ? [{ groupId: "id", id: "local" }]
@@ -424,6 +446,10 @@ test("reads occur only after offline reopen, and no explicit write/sync API is u
     { ...config, serverUrl: "http://127.0.0.1:5006", syncId: "id" },
     { password: "fake", encryptionPassword: "fake2" },
     "/unused",
+  );
+  assert.equal(
+    result.Actual_Status.find((r) => r.key === "server_version").value,
+    "26.8.0",
   );
   assert.equal(result.Actual_Accounts[0].balance_minor, 2500);
   assert.deepEqual(calls, [
@@ -475,4 +501,133 @@ test("publisher makes one atomic batch and verifies typed row readback", async (
   );
   await assert.rejects(s.publish(t, "different-budget", []));
   assert.equal(writes, 2);
+});
+
+test("updates compare numeric releases and reject package/path injection", () => {
+  assert.equal(newer("26.10.0", "26.9.0"), true);
+  assert.equal(newer("26.9.1", "26.9.0"), true);
+  for (const version of [
+    "26.9.0",
+    "26.8.0",
+    "26.10.0-beta.1",
+    "latest",
+    "../../bad",
+    "26.10.0;echo bad",
+  ])
+    assert.equal(newer(version, "26.9.0"), false);
+  assert.equal(release("26.10.0"), true);
+});
+test("failed SDK installation leaves active selection intact and removes staging", async () => {
+  const state = await mkdtemp(join(tmpdir(), "actual-upgrade-"));
+  try {
+    await writeFile(join(state, "sdk-version"), "26.9.0");
+    await assert.rejects(
+      updateSdk(state, "26.10.0", undefined, async () => {
+        throw new Error("synthetic registry failure");
+      }),
+    );
+    assert.equal(await readFile(join(state, "sdk-version"), "utf8"), "26.9.0");
+    assert.deepEqual(await readdir(state), ["sdk-version"]);
+  } finally {
+    await rm(state, { recursive: true, force: true });
+  }
+});
+test("successful SDK update activates exact version for future fresh workers", async () => {
+  const state = await mkdtemp(join(tmpdir(), "actual-upgrade-"));
+  try {
+    const sdk = await updateSdk(
+      state,
+      "26.10.0",
+      undefined,
+      async (cmd, args, options) => {
+        assert.equal(cmd, "npm");
+        assert.ok(args.includes("--registry=https://registry.npmjs.org"));
+        const pkg = JSON.parse(
+          await readFile(join(options.cwd, "package.json"), "utf8"),
+        );
+        assert.equal(pkg.dependencies["@actual-app/api"], "26.10.0");
+        const base = join(options.cwd, "node_modules/@actual-app/api");
+        await mkdir(join(base, "lib"), { recursive: true });
+        await writeFile(
+          join(base, "package.json"),
+          JSON.stringify({ version: "26.10.0", main: "lib/index.js" }),
+        );
+        await writeFile(join(base, "lib/index.js"), "module.exports = {};");
+      },
+    );
+    assert.equal(sdk.version, "26.10.0");
+    assert.deepEqual(await currentSdk("/unused", state), sdk);
+    assert.ok(
+      !(await readdir(state)).some((name) => name.startsWith("sdk-install-")),
+    );
+  } finally {
+    await rm(state, { recursive: true, force: true });
+  }
+});
+test("failure reporting updates only status and preserves success and binding", async () => {
+  const s = new Sheets("synthetic-sheet", {});
+  const before = empty();
+  before.Actual_Status.push(
+    ["last_success_at", "2026-01-01"],
+    ["budget_binding", "synthetic-binding"],
+  );
+  s.metadata = async () => metadata();
+  s.read = async () => before;
+  let requests;
+  s.request = async (_, body) => {
+    requests = body.requests;
+  };
+  await s.reportStatus(
+    { run_status: "error", error_code: "ACTUAL_FAILED" },
+    "synthetic-binding",
+  );
+  const statusId = metadata().sheets.find(
+    (s) => s.properties.title === "Actual_Status",
+  ).properties.sheetId;
+  for (const request of requests) {
+    const target =
+      request.updateCells?.range ??
+      request.repeatCell?.range ??
+      request.setBasicFilter?.filter.range ??
+      request.updateSheetProperties?.properties;
+    assert.equal(target.sheetId, statusId);
+  }
+  assert.match(JSON.stringify(requests), /2026-01-01/);
+  assert.match(JSON.stringify(requests), /synthetic-binding/);
+  await assert.rejects(
+    s.reportStatus({ run_status: "error" }, "wrong-binding"),
+    { code: "BUDGET_CHANGED" },
+  );
+  before.Actual_Status[0] = ["wrong", "header"];
+  await assert.rejects(
+    s.reportStatus({ run_status: "error" }, "synthetic-binding"),
+    { code: "HEADERS_CHANGED" },
+  );
+});
+
+test("worker probes selected SDK in a fresh process and returns sanitized errors", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "actual-worker-"));
+  try {
+    const entry = join(dir, "sdk.mjs");
+    await writeFile(
+      entry,
+      'export async function init() {} export async function shutdown() {} export async function getServerVersion() {return {version: "26.10.0"}}',
+    );
+    const sdk = { version: "26.10.0", entry };
+    const controller = new AbortController();
+    assert.deepEqual(
+      await runWorker(config, {}, dir, controller.signal, sdk, true),
+      { version: "26.10.0" },
+    );
+    await writeFile(
+      entry,
+      'export async function init() {throw new Error("PRIVATE_TOKEN")} export async function shutdown() {}',
+    );
+    await assert.rejects(
+      runWorker(config, {}, dir, controller.signal, sdk, true),
+      (e) => e.code === "ACTUAL_FAILED" && !e.message.includes("PRIVATE_TOKEN"),
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

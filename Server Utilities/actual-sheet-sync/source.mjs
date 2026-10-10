@@ -227,7 +227,7 @@ export function normalize(raw, config, asOf, capturedAt) {
     Actual_Status: [
       { key: "last_success_at", value: capturedAt },
       { key: "as_of_date", value: asOf },
-      { key: "sdk_version", value: SDK_VERSION },
+      { key: "sdk_version", value: raw.sdkVersion ?? SDK_VERSION },
       { key: "server_version", value: raw.serverVersion },
       { key: "budget_mode", value: "tracking" },
       { key: "currency", value: config.currency },
@@ -310,9 +310,8 @@ export async function acquire(api, config, credentials, cache) {
     });
     const version = await api.getServerVersion();
     check(
-      version.version === SDK_VERSION,
-      "VERSION_MISMATCH",
-      "Use the matching Actual server/API version before downloading a budget.",
+      typeof version?.version === "string" && !version.error,
+      "SERVER_VERSION",
     );
     serverVersion = version.version;
     const remote = (await api.getBudgets()).filter(
@@ -337,6 +336,7 @@ export async function acquire(api, config, credentials, cache) {
     await api.loadBudget(local.id);
     const raw = await readBudget(api, config, asOf);
     raw.serverVersion = serverVersion;
+    raw.sdkVersion = config.sdkVersion ?? SDK_VERSION;
     return normalize(raw, config, asOf, new Date().toISOString());
   } finally {
     await api.shutdown();
